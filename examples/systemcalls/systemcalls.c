@@ -1,4 +1,12 @@
 #include "systemcalls.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+//#define _GNU_SOURCE
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +24,11 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
-    return true;
+    int sysreturn = system(cmd);
+    if ( WIFEXITED(sysreturn) || WIFSIGNALED(sysreturn) )
+	return true;
+    else
+	return false;
 }
 
 /**
@@ -58,10 +69,25 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
-
     va_end(args);
 
-    return true;
+    pid_t forkreturn = fork();
+    if (forkreturn < 0)
+	exit(EXIT_FAILURE);
+    else if (forkreturn == 0) {
+	//this is child process
+	execv( command[0], command );
+	exit(EXIT_FAILURE);
+    }
+    int status;
+    wait(&status);
+
+    if( WEXITSTATUS(status) == 0 ) {
+        return true;
+    }
+    else {
+	return false;
+    }
 }
 
 /**
@@ -95,5 +121,34 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 
     va_end(args);
 
-    return true;
+    int fd = open( outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644 );
+    if (fd < 0)
+	return false;
+
+    pid_t forkreturn = fork();
+    if(forkreturn < 0)
+	exit(EXIT_FAILURE);
+    if(forkreturn == 0) {
+	//child process
+//	printf("this is child process, opened fd is %d.\n\r", fd);
+	if( dup2( fd, 1) < 0 )
+	    exit(EXIT_FAILURE);
+	close(fd);
+	execv( command[0], command );
+	exit(EXIT_FAILURE);
+    }
+    else {
+	//parent
+	//close(fd);
+
+	int status;
+	wait(&status);
+
+    	if( WEXITSTATUS(status) == 0 ) {
+	    return true;
+	}
+	else {
+	    return false;
+	}
+    }
 }
